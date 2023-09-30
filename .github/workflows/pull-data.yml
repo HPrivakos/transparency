@@ -29,6 +29,7 @@ jobs:
           SHEET_CLIENT_EMAIL: ${{ secrets.SHEET_CLIENT_EMAIL }}
           SHEET_PRIVATE_KEY: ${{ secrets.SHEET_PRIVATE_KEY }}
           ROLLBAR_ACCESS_TOKEN: ${{ secrets.ROLLBAR_ACCESS_TOKEN }}
+          SNAPSHOT_API_KEY: ${{ secrets.SNAPSHOT_API_KEY }}
         run: |
           npx ts-node ./src/export-proposals.ts
           npx ts-node ./src/upload.ts Proposals ./public/proposals.csv
@@ -39,6 +40,7 @@ jobs:
           SHEET_CLIENT_EMAIL: ${{ secrets.SHEET_CLIENT_EMAIL }}
           SHEET_PRIVATE_KEY: ${{ secrets.SHEET_PRIVATE_KEY }}
           ROLLBAR_ACCESS_TOKEN: ${{ secrets.ROLLBAR_ACCESS_TOKEN }}
+          SNAPSHOT_API_KEY: ${{ secrets.SNAPSHOT_API_KEY }}
         run: |
           npx ts-node ./src/export-votes.ts
           npx ts-node ./src/upload.ts Votes ./public/votes.csv
@@ -66,6 +68,7 @@ jobs:
         run: |
           npx ts-node ./src/export-grants.ts
           npx ts-node ./src/upload.ts Grants ./public/grants.csv
+          npx ts-node ./src/upload.ts Vestings ./public/vestings.csv
 
       - name: Pull Transactions
         env:
@@ -115,13 +118,14 @@ jobs:
           SHEET_CLIENT_EMAIL: ${{ secrets.SHEET_CLIENT_EMAIL }}
           SHEET_PRIVATE_KEY: ${{ secrets.SHEET_PRIVATE_KEY }}
           ROLLBAR_ACCESS_TOKEN: ${{ secrets.ROLLBAR_ACCESS_TOKEN }}
+          SNAPSHOT_API_KEY: ${{ secrets.SNAPSHOT_API_KEY }}
         run: |
           npx ts-node ./src/export-members.ts
           npx ts-node ./src/upload.ts Members ./public/members.csv
 
       - name: Export KPIs
         env:
-          NODE_OPTIONS: "--max-old-space-size=4096"
+          NODE_OPTIONS: "--max-old-space-size=8192"
           SHEET_ID: ${{ secrets.SHEET_ID }}
           SHEET_CLIENT_EMAIL: ${{ secrets.SHEET_CLIENT_EMAIL }}
           SHEET_PRIVATE_KEY: ${{ secrets.SHEET_PRIVATE_KEY }}
@@ -132,7 +136,7 @@ jobs:
 
       - name: Export API
         env:
-          NODE_OPTIONS: "--max-old-space-size=4096"
+          NODE_OPTIONS: "--max-old-space-size=8192"
           ROLLBAR_ACCESS_TOKEN: ${{ secrets.ROLLBAR_ACCESS_TOKEN }}
         run: npx ts-node ./src/export-api.ts
 
@@ -146,8 +150,25 @@ jobs:
           ROLLBAR_ACCESS_TOKEN: ${{ secrets.ROLLBAR_ACCESS_TOKEN }}
         run: npx ts-node ./src/export-budgets.ts
 
+      - name: Remove transactions.json & transactions.csv
+        run: |
+          if [ -f ./public/transactions.json ]; then
+            rm ./public/transactions.json
+            echo "transactions.json successfully removed."
+          else
+          echo "The file transactions.json does not exist in the ./public directory."
+          fi
+          if [ -f ./public/transactions.csv ]; then
+            rm ./public/transactions.csv
+            echo "transactions.csv successfully removed."
+          else
+            echo "The file transactions.csv does not exist in the ./public directory."
+          fi
+
       - name: Deploy 🚀
+        if: ${{ !cancelled() }}
         uses: JamesIves/github-pages-deploy-action@v4.2.2
         with:
+          clean: false
           branch: gh-pages
           folder: public

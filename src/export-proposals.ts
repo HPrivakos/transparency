@@ -10,11 +10,21 @@ import {
   snapshotUrl
 } from './utils'
 
+require('dotenv').config()
+
+const SNAPSHOT_API_KEY = process.env.SNAPSHOT_API_KEY
+
 async function main() {
   // Fetch Snapshot Proposals
-  const url = snapshotUrl()
-  const where = `space_in: ["${SnapshotSpace.DCL}"]`
-  const proposals = await fetchGraphQLCondition<Proposal>(url, 'proposals', 'created', 'id', 'id scores_total strategies { params } scores_by_strategy votes created', where)
+  const proposals = await fetchGraphQLCondition<Proposal>({
+    url: snapshotUrl(), 
+    collection: 'proposals', 
+    fieldNameCondition: 'created', 
+    dataKey: 'id', 
+    fields: 'id scores_total strategies { params } scores_by_strategy votes created', 
+    where: `space_in: ["${SnapshotSpace.DCL}"]`,
+    apiKey: SNAPSHOT_API_KEY
+  })
 
   const proposalVotes: ProposalVotes = {}
   proposals.forEach(p => proposalVotes[p.id] = p)
@@ -56,7 +66,7 @@ async function main() {
       landVP: getVP(pv, Symbol.LAND) + getVP(pv, Symbol.ESTATE),
       namesVP: getVP(pv, Symbol.NAMES),
       delegatedVP: getVP(pv, Symbol.VP_DELEGATED),
-      vesting_address: p.vesting_address,
+      vesting_addresses: p.vesting_addresses,
       enacting_tx: p.enacting_tx
     }
 

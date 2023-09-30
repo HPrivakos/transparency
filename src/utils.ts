@@ -1,5 +1,5 @@
 import { Tokens } from './entities/Tokens'
-import { DataByNetworks, Network, NetworkName } from './entities/Networks'
+import { DataByNetworks, Network, NetworkName, Networks } from './entities/Networks'
 import BigNumber from 'bignumber.js'
 import { createObjectCsvWriter } from 'csv-writer'
 import { ObjectStringifierHeader } from 'csv-writer/src/lib/record'
@@ -11,7 +11,7 @@ import { KPI } from './interfaces/KPIs'
 import { Delegation, DelegationInfo, ReceivedDelegations } from './interfaces/Members'
 import { TransactionDetails } from './interfaces/Transactions/Transactions'
 import { TransferType } from './interfaces/Transactions/Transfers'
-import { CovalentResponse } from './interfaces/Covalent'
+import { BlockHeight, CovalentResponse } from './interfaces/Covalent'
 import { ethers } from 'ethers'
 import { TokenPriceAPIData } from './interfaces/Transactions/TokenPrices'
 import Path from 'path'
@@ -110,13 +110,13 @@ export async function fetchURL(url: string, options?: RequestInit, retry?: numbe
   }
 }
 
-export async function fetchCovalentURL<T>(url: string, pageSize = 10000) {
+export async function fetchCovalentURL<T>(url: string, pageSize = 10000, singlePage = false): Promise<T[]> {
   let hasNext = true
   const result: T[] = []
   let page = 0
   let retries = 15
 
-  while (hasNext) {
+  do {
     const response: CovalentResponse<T> = await fetchURL(url + (pageSize === 0 ? '' : `&page-size=${pageSize}&page-number=${page}`), {}, 10)
 
     if (response.error) {
@@ -132,7 +132,7 @@ export async function fetchCovalentURL<T>(url: string, pageSize = 10000) {
     result.push(...(response.data.items || response.data))
     page++
     hasNext = response.data.pagination && response.data.pagination.has_more
-  }
+  } while (hasNext && !singlePage)
 
   return result
 }
@@ -146,7 +146,16 @@ function removeDuplicates<T>(data: T[], dataKey: string) {
   return Object.values(dataMap)
 }
 
-export async function fetchGraphQLCondition<T>(url: string, collection: string, fieldNameCondition: string, dataKey: string, fields: string, where?: string): Promise<T[]> {
+type GraphQLProps = {
+  url: string
+  collection: string
+  fieldNameCondition: string
+  dataKey: string
+  fields: string
+  where?: string
+  apiKey?: string
+}
+export async function fetchGraphQLCondition<T>({url, collection, fieldNameCondition, dataKey, fields, where, apiKey}: GraphQLProps): Promise<T[]> {
   let hasNext = true
   let lastField = 0
   const FIRST = 1000
@@ -158,10 +167,12 @@ export async function fetchGraphQLCondition<T>(url: string, collection: string, 
     }
   `
 
+  const apiKeyHeader = apiKey ? { 'x-api-key': apiKey } : {}
+
   const elements: T[] = []
   while (hasNext) {
     const json = await fetchURL(url, {
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...apiKeyHeader },
       body: JSON.stringify({ 'query': query, 'variables': { lastField } }),
       method: 'POST'
     }, 5)
@@ -188,8 +199,15 @@ export async function fetchDelegations(members: string[], space: string): Promis
 
   const where = (members: string[], memberIn: 'delegator' | 'delegate') => `space_in: ["", "${space}"], ${memberIn}_in: ${JSON.stringify(members)}`
 
-  const unresolvedGivenDelegations = fetchGraphQLCondition<Delegation>(snapshotQueryUrl, 'delegations', 'timestamp', 'id', 'id delegator delegate', where(members, 'delegator'))
-  const unresolvedReceivedDelegations = fetchGraphQLCondition<Delegation>(snapshotQueryUrl, 'delegations', 'timestamp', 'id', 'id delegator delegate', where(members, 'delegate'))
+  const delegationsProps: GraphQLProps = {
+    url: snapshotQueryUrl,
+    collection: 'delegations',
+    fieldNameCondition: 'timestamp',
+    dataKey: 'id',
+    fields: 'id delegator delegate',
+  }
+  const unresolvedGivenDelegations = fetchGraphQLCondition<Delegation>({...delegationsProps, where: where(members, 'delegator')})
+  const unresolvedReceivedDelegations = fetchGraphQLCondition<Delegation>({...delegationsProps, where: where(members, 'delegate')})
 
   const [snapshotGivenDelegations, snapshotReceivedDelegations] = await Promise.all([unresolvedGivenDelegations, unresolvedReceivedDelegations])
 
@@ -294,26 +312,36 @@ export function parseKPIs(kpis: KPI[]) {
 
 export type LatestBlocks = DataByNetworks<Record<string, { block: number, date: string }>>
 
-export function getLatestBlockByToken(txs: TransactionParsed[]): LatestBlocks {
+export async function getLatestBlockByToken(txs: TransactionParsed[], currentYear: number): Promise<LatestBlocks> {
   const latestBlocks: LatestBlocks = {
     [NetworkName.ETHEREUM]: {},
     [NetworkName.POLYGON]: {}
   }
 
-  for (const network of Object.values(NetworkName)) {
-    for (const tokenAddress of Tokens.getAddresses(network)) {
-      const latestBlock = txs
-        .filter(tx => tx.network === network && tx.contract.toLowerCase() === tokenAddress)
-        .map(tx => ({ block: tx.block, date: tx.date.split('T')[0] }))
-        .sort((a, b) => b.block - a.block)[0]
-
-      if (latestBlock) {
-        latestBlocks[network][tokenAddress] = latestBlock
+  try {
+    for (const network of Object.values(NetworkName)) {
+      const url = `${baseCovalentUrl(Networks.get(network))}/block_v2/${currentYear}-01-01/${currentYear}-01-02/?key=${COVALENT_API_KEY}`
+      const blockHeight = (await fetchCovalentURL<BlockHeight>(url, 1, true))[0]
+      const defaultBlock = { block: blockHeight.height, date: blockHeight.signed_at.split('T')[0]}
+      for (const tokenAddress of Tokens.getAddresses(network)) {
+        const latestBlock = txs
+          .filter(tx => tx.network === network && tx.contract.toLowerCase() === tokenAddress)
+          .map(tx => ({ block: tx.block, date: tx.date.split('T')[0] }))
+          .sort((a, b) => b.block - a.block)[0]
+  
+        if (latestBlock) {
+          latestBlocks[network][tokenAddress] = latestBlock
+        }
+        else {
+          latestBlocks[network][tokenAddress] = { ...defaultBlock }
+        }
       }
     }
+  
+    return latestBlocks
+  } catch (error) {
+    throw new Error(`Error getting latest block by token: ${error}`);
   }
-
-  return latestBlocks
 }
 
 export function printableLatestBlocks(latestBlocks: LatestBlocks) {

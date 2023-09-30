@@ -12,6 +12,10 @@ import {
 import { parseVP } from './vp-utils'
 import { MemberVP } from './interfaces/Members'
 
+require('dotenv').config()
+
+const SNAPSHOT_API_KEY = process.env.SNAPSHOT_API_KEY
+
 export type VotesParsed = {
   voter: string
   created: string
@@ -21,13 +25,19 @@ export type VotesParsed = {
   proposal_title: string
   choice_text: string
   weight: number
-} & Pick<MemberVP, 'manaVP' | 'namesVP' | 'landVP' | 'delegatedVP' | 'l1WearablesVP' | 'rentalVP'>
+} & Omit<MemberVP, 'totalVP'>
 
 async function main() {
   // Fetch Snapshot Votes
-  const url = snapshotUrl()
-  const where = `space_in: ["${SnapshotSpace.DCL}"], vp_gt: ${MEMBER_VOTE_VP_THRESHOLD}`
-  const votes = await fetchGraphQLCondition<Vote>(url, 'votes', 'created', 'id', 'id voter created choice proposal { id title choices scores_total } vp vp_by_strategy', where)
+  const votes = await fetchGraphQLCondition<Vote>({
+    url: snapshotUrl(), 
+    collection: 'votes', 
+    fieldNameCondition: 'created', 
+    dataKey: 'id', 
+    fields: 'id voter created choice proposal { id title choices scores_total } vp vp_by_strategy', 
+    where: `space_in: ["${SnapshotSpace.DCL}"], vp_gt: ${MEMBER_VOTE_VP_THRESHOLD}`,
+    apiKey: SNAPSHOT_API_KEY
+  })
 
   const votesParsed: VotesParsed[] = votes.map(vote => {
     const vpSources = parseVP(vote.vp_by_strategy)
@@ -43,6 +53,7 @@ async function main() {
       manaVP: vpSources.manaVP,
       namesVP: vpSources.namesVP,
       landVP: vpSources.landVP,
+      estateVP: vpSources.estateVP,
       delegatedVP: vpSources.delegatedVP,
       l1WearablesVP: vpSources.l1WearablesVP,
       rentalVP: vpSources.rentalVP
@@ -63,6 +74,7 @@ async function main() {
     { id: 'manaVP', title: 'MANA VP' },
     { id: 'namesVP', title: 'Names VP' },
     { id: 'landVP', title: 'LAND VP' },
+    { id: 'estateVP', title: 'ESTATE VP' },
     { id: 'delegatedVP', title: 'Delegated VP' },
     { id: 'l1WearablesVP', title: 'L1 Wearables VP' },
     { id: 'rentalVP', title: 'Rental VP' }

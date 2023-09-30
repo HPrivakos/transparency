@@ -4,17 +4,20 @@ import { SnapshotSpace } from './interfaces/GovernanceProposal'
 import { DelegationInfo, MemberInfo, Vote } from './interfaces/Members'
 import {
   fetchDelegations,
-  fetchGraphQLCondition,
   flattenArray,
-  MEMBER_VOTE_VP_THRESHOLD,
   reportToRollbarAndThrow,
   saveToCSV,
   saveToJSON,
-  snapshotUrl,
   splitArray
 } from './utils'
 import { getScoresForAddress, parseVP, STRATEGIES } from './vp-utils'
+import VOTES from '../public/votes.json'
+import { VotesParsed } from './export-votes'
 
+require('dotenv').config()
+
+const SNAPSHOT_API_KEY = process.env.SNAPSHOT_API_KEY
+const SCORE_API_URL = `https://score.snapshot.org/?apiKey=${SNAPSHOT_API_KEY}`
 const MAX_RETRIES = 10
 
 const space = SnapshotSpace.DCL
@@ -35,7 +38,7 @@ async function fetchSnapshotScores(addresses: string[], jobId: number) {
 
     for (const address of list) {
       try {
-        const score = await snapshot.utils.getScores(space, STRATEGIES, network, [address])
+        const score = await snapshot.utils.getScores(space, STRATEGIES, network, [address], undefined, SCORE_API_URL)
         for (const idx in score) {
           snapshotScores[idx] = { ...snapshotScores[idx], ...score[idx] }
         }
@@ -109,10 +112,7 @@ async function getMembersInfo(addresses: string[], jobId: number) {
 }
 
 async function main() {
-  // Fetch Snapshot Votes
-  const url = snapshotUrl()
-  const where = `space_in: ["${space}"], vp_gt: ${MEMBER_VOTE_VP_THRESHOLD}`
-  const votes = await fetchGraphQLCondition<Vote>(url, 'votes', 'created', 'voter', 'voter created', where)
+  const votes = VOTES as VotesParsed[]
 
   const members = new Set(votes.map(v => v.voter.toLowerCase())) // Unique addresses
   console.log('Total Members:', members.size)
@@ -126,6 +126,7 @@ async function main() {
     { id: 'totalVP', title: 'Total VP' },
     { id: 'manaVP', title: 'MANA VP' },
     { id: 'landVP', title: 'LAND VP' },
+    { id: 'estateVP', title: 'ESTATE VP' },
     { id: 'namesVP', title: 'NAMES VP' },
     { id: 'delegatedVP', title: 'Delegated VP' },
     { id: 'l1WearablesVP', title: 'L1 Wearables VP' },

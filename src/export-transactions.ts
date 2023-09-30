@@ -62,7 +62,7 @@ const WALLET_ADDRESSES = new Set(Wallets.getAddresses())
 const PAGE_SIZE = 1000
 
 const GRANTS: GrantProposal[] = RAW_GRANTS
-const GRANTS_VESTING_ADDRESSES = new Set(GRANTS.filter(g => g.status === Status.ENACTED && g.vesting_address).map(g => g.vesting_address.toLowerCase()))
+const GRANTS_VESTING_ADDRESSES = new Set(flattenArray(GRANTS.filter(g => g.status === Status.ENACTED && g.vesting_addresses.length > 0).map(g => g.vesting_addresses.map(address => address.toLowerCase()))))
 const GRANTS_ENACTING_TXS = new Set(GRANTS.filter(g => g.status === Status.ENACTED && g.enacting_tx).map(g => g.enacting_tx.toLowerCase()))
 const SAB_ADDRESS = '0x0e659a116e161d8e502f9036babda51334f2667e' // Sec Advisory Board
 const FACILITATOR_ADDRESS = '0x76fb13f00cdbdd5eac8e2664cf14be791af87cb0'
@@ -178,7 +178,7 @@ async function findSecondarySalesTag(txs: TransactionParsed[], chunk: number) {
         }
 
       } catch (error) {
-        console.log('retrying...')
+        console.log(`Chunk: ${chunk} - retrying...`)
         maxRetries--
       }
     } while (!fetched && maxRetries > 0)
@@ -191,9 +191,10 @@ async function findSecondarySalesTag(txs: TransactionParsed[], chunk: number) {
   console.log(`Secondary sales tagged: ${txs.length} - Chunk = ${chunk}`)
 }
 
-async function saveTransactions(txs: TransactionParsed[], tagged = false) {
-  saveToJSON('transactions.json', txs)
-  await saveToCSV('transactions.csv', txs, [
+async function saveTransactionFiles(txs: TransactionParsed[], tagged = false, year?: number) {
+  const yearText = year ? `-${year}` : ''
+  saveToJSON(`transactions${yearText}.json`, txs)
+  await saveToCSV(`transactions${yearText}.csv`, txs, [
     { id: 'date', title: 'Date' },
     { id: 'wallet', title: 'Wallet' },
     { id: 'network', title: 'Network' },
@@ -210,6 +211,23 @@ async function saveTransactions(txs: TransactionParsed[], tagged = false) {
     { id: 'hash', title: 'Hash' },
     { id: 'contract', title: 'Contract' }
   ])
+}
+
+async function saveTransactions(txs: TransactionParsed[], tagged = false) {
+  const txsPerYear: Map<number, TransactionParsed[]> = new Map()
+
+  for(const tx of txs) {
+    const year = new Date(tx.date).getUTCFullYear()
+    const yearTxs = txsPerYear.get(year) || []
+    yearTxs.push(tx)
+    txsPerYear.set(year, yearTxs)
+  }
+
+  for (const [year, yearTxs] of txsPerYear) {
+    await saveTransactionFiles(yearTxs, tagged, year)
+  }
+
+  await saveTransactionFiles(txs, tagged)
 }
 
 async function tagging(txs: TransactionParsed[]) {
@@ -352,15 +370,17 @@ async function main() {
   let lastTransactions: TransactionParsed[] = []
   const unresolvedTransactions: Promise<TransactionParsed[]>[] = []
 
-  const fullFetch = process.argv.includes('--full')
+  const isFirstDayOfTheYear = new Date().getUTCMonth() === 0 && new Date().getUTCDate() === 1
+  const fullFetch = process.argv.includes('--full') || isFirstDayOfTheYear
 
   if (!fullFetch) {
-    lastTransactions = await fetchURL(`${DECENTRALAND_DATA_URL}/transactions.json`)
-    latestBlocks = await getLatestBlockByToken(lastTransactions)
+    const currentYear = new Date().getUTCFullYear()
+    lastTransactions = await fetchURL(`${DECENTRALAND_DATA_URL}/transactions-${currentYear}.json`)
+    latestBlocks = await getLatestBlockByToken(lastTransactions, currentYear)
     console.log('Latest Blocks:', printableLatestBlocks(latestBlocks))
   } else {
     console.log('\n\n###################### WARNING: fetching all transactions ######################\n\n')
-    priceData = await getTokenPrices(!fullFetch ? latestBlocks : undefined)
+    priceData = await getTokenPrices()
     console.log('Fetched price data...')
   }
 

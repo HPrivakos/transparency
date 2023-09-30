@@ -74,6 +74,11 @@ export const DAOCommittee = new Committee(
       address: '0x88013D7eD946dD8292268a6FF69165a97A89a639',
       name: 'Tobik',
       avatar: 'https://peer.decentraland.org/content/contents/bafkreif25t6mav5bgkajwr6l6wptzh5lkmonuw7pzricrin6fyhoazfruu'
+    },
+    {
+      address: '0xd6c957f9a6411f35d01baae2658758f277408878',
+      name: 'RizkGh',
+      avatar: 'https://peer.decentraland.org/content/contents/bafkreidnd3mgh25roc6g4scwkidkbo5pdr2w3lqpjecrnadx6dns72ojdy'
     }
   ]
 )
@@ -157,6 +162,34 @@ export const CurationCommittee = new Committee(
       address: '0x967fb0c36e4f5288f30fb05f8b2a4d7b77eaca4b',
       name: 'KJWalker',
       avatar: 'https://peer.decentraland.org/content/contents/bafkreidrquum4l7dymzhodvzctjaj2odhtp6lxjjn6rkoefy5jr6qycsey'
+    }
+  ]
+)
+
+export const RevocationCommittee = new Committee(
+  'Revocation Committee',
+  'Responsible for reviewing cases raised by the community regarding Grants Program that raise concerns. After an assessment, they decide if a Grant has to be revoked or not. They also make recommendations for changes in the Grants Program when identifying improvements.',
+  4,
+  [
+    {
+      address: '0x895Be97bDb9F8a244c472B18EA96DeE39ddf8fe5',
+      name: 'dax',
+      avatar: 'https://peer.decentraland.org/content/contents/bafkreih7ul7ovk2s6girhpvqh5nyk32k7pekdwwlqjbl2iigednwxsfafy'
+    },
+    {
+      address: '0x05060Fa97e54a812d1E15cEc6c34e79f74eBD0b3',
+      name: 'MetaDoge',
+      avatar: 'https://peer.decentraland.org/content/contents/bafkreihwsyuhzujztiq34whajfp4qxk4ava3okzxge2fiviie5vov4tp2u'
+    },
+    {
+      address: '0x9937E3e274be96a624d7Cd00F384EB71c741Dd1b',
+      name: 'Maryana',
+      avatar: 'https://peer.decentraland.org/content/contents/bafkreidyp7cslipz3l7wrr2paothwsqreokm5se4vq3qyrey67olltcgi4'
+    },
+    {
+      address: '0x1e105bb213754519903788022b962fe2B9C4B263',
+      name: 'BayBackner',
+      avatar: 'https://peer.decentraland.org/content/contents/bafkreieonpaf25iryrxqk5yivvathsga7n2idbcbpphpsveqiblpcs3jwu'
     }
   ]
 )
